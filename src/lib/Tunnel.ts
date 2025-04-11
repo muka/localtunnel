@@ -1,24 +1,61 @@
-/* eslint-disable consistent-return, no-underscore-dangle */
+import axios, { AxiosRequestConfig } from 'axios';
+import { EventEmitter } from 'events';
 
-const { parse } = require('url');
-const { EventEmitter } = require('events');
-const axios = require('axios');
-const debug = require('debug')('localtunnel:client');
+import TunnelCluster from './TunnelCluster.js';
+import { newLogger } from './logger.js';
 
-const TunnelCluster = require('./TunnelCluster');
+export const sleep = (ts: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ts))
 
-module.exports = class Tunnel extends EventEmitter {
-  constructor(opts = {}) {
-    super(opts);
-    this.opts = opts;
+export type TunnelOptions = {
+  
+  host?: string
+  port?: number
+
+  subdomain?: string
+
+  local_host?: string
+
+  local_https?: string, 
+  local_cert?: string, 
+  local_key?: string, 
+  local_ca?: string, 
+  allow_invalid_cert?: boolean
+
+}
+
+export default class Tunnel extends EventEmitter {
+
+  private readonly logger = newLogger(Tunnel.name)
+
+  private closed: boolean
+  private tunnelCluster: TunnelCluster
+  
+  private clientId: string
+  private url: string
+  private cachedUrl: string
+
+  constructor(private readonly opts: TunnelOptions = {}) {
+    super();
     this.closed = false;
     if (!this.opts.host) {
       this.opts.host = 'https://localtunnel.me';
     }
   }
 
-  _getInfo(body) {
-    /* eslint-disable camelcase */
+  getURL() {
+    return this.url
+  }
+
+  getCachedURL() {
+    return this.cachedUrl
+  }
+
+  getClientId() {
+    return this.clientId
+  }
+
+  private getInfo(body) {
+     
     const { id, ip, port, url, cached_url, max_conn_count } = body;
     const { host, port: local_port, local_host } = this.opts;
     const { local_https, local_cert, local_key, local_ca, allow_invalid_cert } = this.opts;
@@ -27,7 +64,7 @@ module.exports = class Tunnel extends EventEmitter {
       url,
       cached_url,
       max_conn: max_conn_count || 1,
-      remote_host: parse(host).hostname,
+      remote_host: new URL(host).hostname,
       remote_ip: ip,
       remote_port: port,
       local_port,
@@ -38,16 +75,16 @@ module.exports = class Tunnel extends EventEmitter {
       local_ca,
       allow_invalid_cert,
     };
-    /* eslint-enable camelcase */
+     
   }
 
   // initialize connection
   // callback with connection info
-  _init(cb) {
-    const opt = this.opts;
-    const getInfo = this._getInfo.bind(this);
+  private async init() {
 
-    const params = {
+    const opt = this.opts;
+
+    const params: AxiosRequestConfig = {
       responseType: 'json',
     };
 
@@ -57,28 +94,33 @@ module.exports = class Tunnel extends EventEmitter {
     // where to quest
     const uri = baseUri + (assignedDomain || '?new');
 
-    (function getUrl() {
-      axios
-        .get(uri, params)
-        .then(res => {
-          const body = res.data;
-          debug('got tunnel information', res.data);
-          if (res.status !== 200) {
-            const err = new Error(
-              (body && body.message) || 'localtunnel server returned an error, please try again'
-            );
-            return cb(err);
-          }
-          cb(null, getInfo(body));
-        })
-        .catch(err => {
-          debug(`tunnel server offline: ${err.message}, retry 1s`);
-          return setTimeout(getUrl, 1000);
-        });
-    })();
+    const retry = true
+    while(retry) {
+      try {
+        const res = await axios.get(uri, params)
+
+        const body = res.data;
+
+        this.logger.debug(`got tunnel information ${res.data}`);
+
+        if (res.status !== 200) {
+          const err = new Error(
+            (body && body.message) || 'localtunnel server returned an error, please try again'
+          );
+          throw err
+        }
+
+        return this.getInfo(body)
+      }  catch (err) {
+        this.logger.debug(`tunnel server offline: ${err.message}, retry 1s`);
+        await sleep(1000)
+      }
+    }
+
+    throw new Error("Failed to start tunnel")
   }
 
-  _establish(info) {
+  private establish(info) {
     // increase max event listeners so that localtunnel consumers don't get
     // warning messages as soon as they setup even one listener. See #71
     this.setMaxListeners(info.max_conn + (EventEmitter.defaultMaxListeners || 10));
@@ -92,7 +134,7 @@ module.exports = class Tunnel extends EventEmitter {
 
     // re-emit socket error
     this.tunnelCluster.on('error', err => {
-      debug('got socket error', err.message);
+      this.logger.debug(`got socket error ${err.message}`);
       this.emit('error', err);
     });
 
@@ -101,7 +143,7 @@ module.exports = class Tunnel extends EventEmitter {
     // track open count
     this.tunnelCluster.on('open', tunnel => {
       tunnelCount++;
-      debug('tunnel open [total: %d]', tunnelCount);
+      this.logger.debug(`tunnel open [total: ${tunnelCount}]`);
 
       const closeHandler = () => {
         tunnel.destroy();
@@ -120,7 +162,7 @@ module.exports = class Tunnel extends EventEmitter {
     // when a tunnel dies, open a new one
     this.tunnelCluster.on('dead', () => {
       tunnelCount--;
-      debug('tunnel dead [total: %d]', tunnelCount);
+      this.logger.debug(`tunnel dead [total: ${tunnelCount}]`);
       if (this.closed) {
         return;
       }
@@ -137,23 +179,18 @@ module.exports = class Tunnel extends EventEmitter {
     }
   }
 
-  open(cb) {
-    this._init((err, info) => {
-      if (err) {
-        return cb(err);
-      }
+  async open() {
+    const info = await this.init()
 
-      this.clientId = info.name;
-      this.url = info.url;
+    this.clientId = info.name;
+    this.url = info.url;
 
-      // `cached_url` is only returned by proxy servers that support resource caching.
-      if (info.cached_url) {
-        this.cachedUrl = info.cached_url;
-      }
+    // `cached_url` is only returned by proxy servers that support resource caching.
+    if (info.cached_url) {
+      this.cachedUrl = info.cached_url;
+    }
 
-      this._establish(info);
-      cb();
-    });
+    this.establish(info);
   }
 
   close() {
