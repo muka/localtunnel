@@ -15,6 +15,7 @@ type CliOpts = {
   port: number
   subdomain?: string
   localHost?: string
+  localHostname?: string
   localHttps?: string
   localCert?: string
   localKey?: string
@@ -36,6 +37,7 @@ const runClient = async (argv: CliOpts) => {
     host: argv.host,
     subdomain: argv.subdomain,
     local_host: argv.localHost,
+    local_hostname: argv.localHostname,
     local_https: argv.localHttps,
     local_cert: argv.localCert,
     local_key: argv.localKey,
@@ -95,7 +97,8 @@ const main = async () => {
     .addOption(portOption)
     .option('--host <string>', 'Upstream server providing forwarding', 'https://localtunnel.me')
     .option('--subdomain, -s <string>', 'Request this subdomain')
-    .option('--local-host, -l <string>', 'Tunnel traffic to this host instead of localhost, override Host header to this host')
+    .option('--local-host, -l <string>', 'Tunnel traffic to this host instead of localhost')
+    .option('--local-hostname <string>', 'Rewrites the HTTP Host header going to the local server')
     .option('--local-https', 'Tunnel traffic to a local HTTPS server')
     .option('--local-key <path>', 'Path to certificate key file for local HTTPS server')
     .option('--local-cert <path>', 'Path to certificate PEM file for local HTTPS server')

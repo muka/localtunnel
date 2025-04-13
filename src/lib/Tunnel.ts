@@ -14,6 +14,7 @@ export type TunnelOptions = {
   subdomain?: string
 
   local_host?: string
+  local_hostname?: string
 
   local_https?: string, 
   local_cert?: string, 
@@ -112,7 +113,7 @@ export default class Tunnel extends EventEmitter {
 
         return this.getInfo(body)
       }  catch (err) {
-        this.logger.debug(`tunnel server offline: ${err.message}, retry 1s`);
+        this.logger.debug(`tunnel server ${uri} offline: ${err.message}, retry 1s`);
         await sleep(1000)
       }
     }

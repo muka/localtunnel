@@ -22,8 +22,9 @@
     "lt": "bin/lt.ts"
   },
   "scripts": {
+    "start": "LOG_LEVEL=debug ./bin/lt.ts",
     "test": "ts-mocha -n loader=ts-node/esm -p tsconfig.json --reporter list --timeout 60000 -- ./src/*.spec.ts",
-    "dev": "nodemon -e ts,js,json --watch './src/**/*' --watch './bin/*' --exec './bin/lt.ts -p 3000 --subdomain test-dev-foobar1'"
+    "dev": "nodemon -e ts,js,json --watch './src/**/*' --watch './bin/*' --exec 'LOG_LEVEL=debug ./bin/lt.ts -p 3000 --subdomain test1 --host http://localhost:8080'"
   },
   "dependencies": {
     "axios": "^1.8.4",

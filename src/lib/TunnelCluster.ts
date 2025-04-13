@@ -16,6 +16,7 @@ type TunnelClusterOptions = {
   remote_port?: number
   
   local_host?: string
+  local_hostname?: string
   local_port?: number
   local_https?: string
 
@@ -41,6 +42,7 @@ export default class TunnelCluster extends EventEmitter {
     const remoteHostOrIp = opt.remote_ip || opt.remote_host;
     const remotePort = opt.remote_port;
     const localHost = opt.local_host || 'localhost';
+    const localHostname = opt.local_hostname || opt.local_host
     const localPort = opt.local_port;
     const localProtocol = opt.local_https ? 'https' : 'http';
     const allowInvalidCert = opt.allow_invalid_cert;
@@ -134,9 +136,9 @@ export default class TunnelCluster extends EventEmitter {
 
         // if user requested specific local host
         // then we use host header transform to replace the host header
-        if (opt.local_host) {
-          this.logger.debug(`transform Host header to ${opt.local_host}`);
-          stream = remote.pipe(new HeaderHostTransformer({ host: opt.local_host }));
+        if (localHostname) {
+          this.logger.debug(`transform Host header to ${localHostname}`);
+          stream = remote.pipe(new HeaderHostTransformer({ host: localHostname }));
         }
 
         stream.pipe(local).pipe(remote);
