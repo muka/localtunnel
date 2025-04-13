@@ -22,8 +22,8 @@
     "lt": "bin/lt.ts"
   },
   "scripts": {
-    "test": "ts-mocha --reporter list --timeout 60000 -- *.spec.ts",
-    "dev": "nodemon -e ts,js,json --watch './src/**/*' --watch './bin/*' --exec './bin/lt.ts -p 3000 --subdomain test-dev-foobar'"
+    "test": "ts-mocha -n loader=ts-node/esm -p tsconfig.json --reporter list --timeout 60000 -- ./src/*.spec.ts",
+    "dev": "nodemon -e ts,js,json --watch './src/**/*' --watch './bin/*' --exec './bin/lt.ts -p 3000 --subdomain test-dev-foobar1'"
   },
   "dependencies": {
     "axios": "^1.8.4",
@@ -57,7 +57,6 @@
     "ts-mocha": "11.1.0",
     "tsx": "4.19.3",
     "typescript": "5.7.3",
-    "typescript-eslint": "8.19.1",
-    "vitest": "3.1.1"
+    "typescript-eslint": "8.19.1"
   }
 }

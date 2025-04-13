@@ -101,7 +101,7 @@ export default class Tunnel extends EventEmitter {
 
         const body = res.data;
 
-        this.logger.debug(`got tunnel information ${res.data}`);
+        this.logger.debug(`got tunnel information ${JSON.stringify(res.data)}`);
 
         if (res.status !== 200) {
           const err = new Error(
