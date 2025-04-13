@@ -19,7 +19,8 @@
   ],
   "main": "./src/localtunnel.ts",
   "bin": {
-    "lt": "bin/lt.ts"
+    "lt": "bin/lt.ts",
+    "localtunnel": "bin/lt.ts"
   },
   "scripts": {
     "start": "LOG_LEVEL=debug ./bin/lt.ts",

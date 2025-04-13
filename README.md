@@ -14,6 +14,14 @@ npx localtunnel --port 8000
 
 ### Globally
 
+### With npx
+
+```
+npx localtunnel <args>
+```
+
+### With npm
+
 ```
 npm install -g localtunnel
 ```
