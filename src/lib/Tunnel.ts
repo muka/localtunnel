@@ -191,7 +191,7 @@ export default class Tunnel extends EventEmitter {
       this.cachedUrl = info.cached_url;
     }
 
-    this.establish(info);
+    await this.establish(info);
   }
 
   close() {
