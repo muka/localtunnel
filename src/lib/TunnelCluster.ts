@@ -40,12 +40,14 @@ export default class TunnelCluster extends EventEmitter {
 
   private certOpts: LocalCertOpts = {}
 
+  private readonly remotes: net.Socket[] = []
+
   constructor(private readonly opts: TunnelClusterOptions = {}) {
     super();
+    this.setMaxListeners(15)
   }
 
   emit(eventName: 'dead') : boolean
-  emit(eventName: 'kill') : boolean
   emit(eventName: 'error', err: Error) : boolean
   emit(eventName: 'open', socket: net.Socket) : boolean
   emit(eventName: 'request', req: { method: string, path: string }) : boolean
@@ -54,7 +56,23 @@ export default class TunnelCluster extends EventEmitter {
   }
 
   async close() {
-    this.emit('kill')
+    for (const remote of this.remotes) {
+      if (!remote.closed && !remote.destroyed) {
+        try {
+          await new Promise<void>((resolve) => remote.end(() => resolve()))
+        } catch {
+          //
+        }
+      }
+      this.removeRemote(remote)
+    }
+  }
+
+  private removeRemote(remote: net.Socket) {
+    const pos = this.remotes.indexOf(remote)
+    if (pos > -1) {
+      this.remotes.splice(pos, 1)
+    }
   }
 
   async getLocalCertOpts () {
@@ -132,6 +150,7 @@ export default class TunnelCluster extends EventEmitter {
       const remoteClose = () => {
         this.logger.debug('remote close');
         this.emit('dead');
+        this.removeRemote(remote)
         local.end();
       };
 
@@ -194,10 +213,8 @@ export default class TunnelCluster extends EventEmitter {
       connLocal();
     });
 
-    // handle TunnelCluster.close
-    this.once('kill', () => {
-      remote.end()
-    })
+    this.remotes.push(remote)
+
   }
 
 };

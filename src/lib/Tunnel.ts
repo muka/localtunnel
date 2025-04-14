@@ -173,8 +173,8 @@ export default class Tunnel extends EventEmitter {
         return this.getInfo(body)
       }  catch (err) {
 
-        if(err.response.status === 401){
-          this.logger.warn(`Server requires a secret to connect (${err.response.statusText})`)
+        if(err.response?.status === 401){
+          this.logger.warn(`Server requires a secret to connect (${err.response.status} ${err.response.statusText})`)
           return null
         }
 
