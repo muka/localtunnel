@@ -1,11 +1,11 @@
 import { EventEmitter } from 'events';
-import fs from 'fs';
+import fs from 'fs/promises';
 import net from 'net';
 import tls from 'tls';
 
+import Stream from 'stream';
 import HeaderHostTransformer from './HeaderHostTransformer.js';
 import { newLogger } from './logger.js';
-import Stream from 'stream';
 
 type SocketError = Error & { code: string }
 
@@ -26,14 +26,50 @@ type TunnelClusterOptions = {
   local_ca?: string
 }
 
+type LocalCertOpts = {
+  rejectUnauthorized?: boolean
+  cert?: Buffer
+  key?: Buffer
+  ca?: Buffer[]
+}
+
 // manages groups of tunnels
 export default class TunnelCluster extends EventEmitter {
 
   private readonly logger = newLogger(TunnelCluster.name)
 
+  private certOpts: LocalCertOpts = {}
+
   constructor(private readonly opts: TunnelClusterOptions = {}) {
     super();
   }
+
+  emit(eventName: 'dead') : boolean
+  emit(eventName: 'kill') : boolean
+  emit(eventName: 'error', err: Error) : boolean
+  emit(eventName: 'open', socket: net.Socket) : boolean
+  emit(eventName: 'request', req: { method: string, path: string }) : boolean
+  emit(eventName: string, ...args: unknown[]) {
+    return super.emit(eventName, ...args)
+  }
+
+  async close() {
+    this.emit('kill')
+  }
+
+  async getLocalCertOpts () {
+    if (!this.certOpts) {
+      this.certOpts = this.opts.allow_invalid_cert
+        ? { rejectUnauthorized: false }
+        : {
+          cert: await fs.readFile(this.opts.local_cert),
+          key: await fs.readFile(this.opts.local_key),
+          ca: this.opts.local_ca ? [await fs.readFile(this.opts.local_ca)] : undefined,
+        };
+    }
+    return this.certOpts
+  }
+
 
   open() {
     const opt = this.opts;
@@ -73,7 +109,7 @@ export default class TunnelCluster extends EventEmitter {
       remote.end();
     });
 
-    const connLocal = () => {
+    const connLocal = async () => {
       if (remote.destroyed) {
         this.logger.debug('remote destroyed');
         this.emit('dead');
@@ -87,18 +123,10 @@ export default class TunnelCluster extends EventEmitter {
         this.logger.debug('allowing invalid certificates');
       }
 
-      const getLocalCertOpts = () =>
-        allowInvalidCert
-          ? { rejectUnauthorized: false }
-          : {
-            cert: fs.readFileSync(opt.local_cert),
-            key: fs.readFileSync(opt.local_key),
-            ca: opt.local_ca ? [fs.readFileSync(opt.local_ca)] : undefined,
-          };
-
       // connection to local http server
+      const localCertOpts = await this.getLocalCertOpts()
       const local = opt.local_https
-        ? tls.connect({ host: localHost, port: localPort, ...getLocalCertOpts() })
+        ? tls.connect({ host: localHost, port: localPort, ...localCertOpts })
         : net.connect({ host: localHost, port: localPort });
 
       const remoteClose = () => {
@@ -161,9 +189,15 @@ export default class TunnelCluster extends EventEmitter {
     });
 
     // tunnel is considered open when remote connects
-    remote.once('connect', () => {
+    remote.once('connect', () => {      
       this.emit('open', remote);
       connLocal();
     });
+
+    // handle TunnelCluster.close
+    this.once('kill', () => {
+      remote.end()
+    })
   }
+
 };

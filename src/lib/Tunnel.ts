@@ -1,10 +1,9 @@
-import axios, { AxiosRequestConfig } from 'axios';
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { EventEmitter } from 'events';
 
 import TunnelCluster from './TunnelCluster.js';
 import { newLogger } from './logger.js';
-
-export const sleep = (ts: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ts))
+import { sleep } from './utils.js';
 
 export type TunnelOptions = {
   
@@ -24,6 +23,30 @@ export type TunnelOptions = {
 
 }
 
+type TunnelInfo = {
+  name: string
+  url: string
+  cached_url?: string
+  max_conn: number
+  remote_host: string
+  remote_port: number
+  local_port?: number
+  local_host?: string
+  local_https?: string
+  local_cert?: string
+  local_key?: string
+  local_ca?: string
+  allow_invalid_cert?: boolean
+}
+
+type LTServerResponse = {
+  id: string,
+  port: number,
+  max_conn_count: number,
+  url: string
+  message?: string
+  cached_url?: string
+}
 export default class Tunnel extends EventEmitter {
 
   private readonly logger = newLogger(Tunnel.name)
@@ -55,9 +78,9 @@ export default class Tunnel extends EventEmitter {
     return this.clientId
   }
 
-  private getInfo(body) {
+  private getInfo(body: LTServerResponse) : TunnelInfo {
      
-    const { id, ip, port, url, cached_url, max_conn_count } = body;
+    const { id, port, url, max_conn_count, cached_url } = body;
     const { host, port: local_port, local_host } = this.opts;
     const { local_https, local_cert, local_key, local_ca, allow_invalid_cert } = this.opts;
     return {
@@ -66,7 +89,6 @@ export default class Tunnel extends EventEmitter {
       cached_url,
       max_conn: max_conn_count || 1,
       remote_host: new URL(host).hostname,
-      remote_ip: ip,
       remote_port: port,
       local_port,
       local_host,
@@ -98,7 +120,7 @@ export default class Tunnel extends EventEmitter {
     const retry = true
     while(retry) {
       try {
-        const res = await axios.get(uri, params)
+        const res = await axios.get<unknown, AxiosResponse<LTServerResponse>>(uri, params)
 
         const body = res.data;
 
@@ -121,7 +143,7 @@ export default class Tunnel extends EventEmitter {
     throw new Error("Failed to start tunnel")
   }
 
-  private establish(info) {
+  private establish(info: TunnelInfo) {
     // increase max event listeners so that localtunnel consumers don't get
     // warning messages as soon as they setup even one listener. See #71
     this.setMaxListeners(info.max_conn + (EventEmitter.defaultMaxListeners || 10));
@@ -194,8 +216,9 @@ export default class Tunnel extends EventEmitter {
     await this.establish(info);
   }
 
-  close() {
+  async close() {
     this.closed = true;
+    await this.tunnelCluster?.close()
     this.emit('close');
   }
 };

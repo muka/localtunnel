@@ -6,6 +6,7 @@ import { InvalidArgumentError, Option, program } from 'commander';
 import openurl from 'openurl';
 import pkg from '../package.json' with { type: "json" };
 import { newLogger } from '../src/lib/logger.js';
+import { sleep } from '../src/lib/utils.js';
 import localtunnel from '../src/localtunnel.js';
 
 const logger = newLogger('lt')
@@ -25,13 +26,19 @@ type CliOpts = {
   printRequests?: boolean
 }
 
+let lock = false
+
 const runClient = async (argv: CliOpts) => {
 
   if (typeof argv.port !== 'number') {
     logger.error('Invalid argument: `port` must be a number');
     process.exit(1);
   }
-  
+
+  if (lock) return
+
+  lock = true
+
   const tunnel = await localtunnel({
     port: argv.port,
     host: argv.host,
@@ -45,12 +52,20 @@ const runClient = async (argv: CliOpts) => {
     allow_invalid_cert: argv.allowInvalidCert,
   })
   
-  tunnel.on('error', err => {
+  tunnel.on('error', async (err) => {
     logger.error(err.message)
-    logger.debug(err.stack)
-    process.exit(1)
+    // logger.debug(err.stack)
+
+    await tunnel.close()
   });
   
+  tunnel.once('close', async () => {
+    if (lock) return
+    logger.info(`Restarting tunnel`)
+    await sleep(5000)
+    await runClient(argv)
+  })
+
   logger.info(`your url is: ${tunnel.getURL()}`);
   
   /**
@@ -68,10 +83,11 @@ const runClient = async (argv: CliOpts) => {
   
   if (argv.printRequests) {
     tunnel.on('request', info => {
-      console.log(new Date().toString(), info.method, info.path);
+      logger.log(new Date().toString(), info.method, info.path);
     });
   }
 
+  lock = false
 }
 
 const main = async () => {
@@ -94,16 +110,20 @@ const main = async () => {
     .name('lt')
     .version(pkg.version)
     .description('localtunnel client')
+
     .addOption(portOption)
     .option('--host <string>', 'Upstream server providing forwarding', 'https://localtunnel.me')
     .option('--subdomain, -s <string>', 'Request this subdomain')
+
     .option('--local-host, -l <string>', 'Tunnel traffic to this host instead of localhost')
     .option('--local-hostname <string>', 'Rewrites the HTTP Host header going to the local server')
     .option('--local-https', 'Tunnel traffic to a local HTTPS server')
     .option('--local-key <path>', 'Path to certificate key file for local HTTPS server')
     .option('--local-cert <path>', 'Path to certificate PEM file for local HTTPS server')
     .option('--local-ca <path>', 'Path to certificate authority file for self-signed certificates')
+    
     .option('--allow-invalid-cert', 'Disable certificate checks for your local HTTPS server (ignore cert/key/ca options)')
+    
     .option('--open, -o', 'Opens the tunnel URL in your browser')
     .option('--print-requests', 'Print basic request info')
     .action(runClient)
