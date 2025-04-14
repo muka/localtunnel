@@ -1,9 +1,12 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { EventEmitter } from 'events';
 
+import jwt from 'jsonwebtoken';
 import TunnelCluster from './TunnelCluster.js';
 import { newLogger } from './logger.js';
 import { sleep } from './utils.js';
+
+const TOKEN_EXPIRES = 60 * 60 // from now, in seconds
 
 export type TunnelOptions = {
   
@@ -21,6 +24,7 @@ export type TunnelOptions = {
   local_ca?: string, 
   allow_invalid_cert?: boolean
 
+  secret?: string
 }
 
 type TunnelInfo = {
@@ -47,6 +51,7 @@ type LTServerResponse = {
   message?: string
   cached_url?: string
 }
+
 export default class Tunnel extends EventEmitter {
 
   private readonly logger = newLogger(Tunnel.name)
@@ -58,12 +63,18 @@ export default class Tunnel extends EventEmitter {
   private url: string
   private cachedUrl: string
 
+  private token?: string
+
   constructor(private readonly opts: TunnelOptions = {}) {
     super();
     this.closed = false;
     if (!this.opts.host) {
       this.opts.host = 'https://localtunnel.me';
     }
+  }
+
+  isClosed() {
+    return this.closed
   }
 
   getURL() {
@@ -101,25 +112,51 @@ export default class Tunnel extends EventEmitter {
      
   }
 
+  private getToken(secret?: string, data: Record<string, string> = {}) {
+    if (this.token) return this.token
+    
+    this.token = jwt.sign({ 
+      ...data,
+      exp: Math.floor(Date.now() / 1000) + TOKEN_EXPIRES,
+    }, secret);
+
+    // reset token and force to regenerate
+    setTimeout(() => {
+      this.token = undefined
+    }, (TOKEN_EXPIRES - 10) * 1000)
+
+    return this.token
+  }
+
   // initialize connection
   // callback with connection info
   private async init() {
 
-    const opt = this.opts;
+    const opts = this.opts;
 
     const params: AxiosRequestConfig = {
       responseType: 'json',
     };
 
-    const baseUri = `${opt.host}/`;
+    const baseUri = `${opts.host}/`;
     // no subdomain at first, maybe use requested domain
-    const assignedDomain = opt.subdomain;
+    const assignedDomain = opts.subdomain;
     // where to quest
     const uri = baseUri + (assignedDomain || '?new');
 
+    const waitFor = 1000
+    const maxRetries = 10
+    let retries = 0
     const retry = true
     while(retry) {
       try {
+
+        if (opts.secret) {
+          params.headers = {
+            Authorization: `Bearer ${this.getToken(opts.secret, { name: opts.subdomain || 'lt' })}`
+          }
+        }
+
         const res = await axios.get<unknown, AxiosResponse<LTServerResponse>>(uri, params)
 
         const body = res.data;
@@ -135,12 +172,27 @@ export default class Tunnel extends EventEmitter {
 
         return this.getInfo(body)
       }  catch (err) {
-        this.logger.debug(`tunnel server ${uri} offline: ${err.message}, retry 1s`);
-        await sleep(1000)
+
+        if(err.response.status === 401){
+          this.logger.warn(`Server requires a secret to connect (${err.response.statusText})`)
+          return null
+        }
+
+        retries++
+
+        if (retries >= maxRetries) {
+          // fail after threshold
+          this.emit('error', new Error(`tunnel server unreachable after ${retries} retries.`))
+          break
+        }
+
+        const waitTime = waitFor * (retries * 1.5)
+        this.logger.debug(`tunnel server ${uri} offline: ${err.message}, retry in ${Math.floor(waitTime/1000)}sec (${retries}/${maxRetries})`);
+        await sleep(waitTime)
       }
     }
 
-    throw new Error("Failed to start tunnel")
+    return null
   }
 
   private establish(info: TunnelInfo) {
@@ -205,6 +257,11 @@ export default class Tunnel extends EventEmitter {
   async open() {
     const info = await this.init()
 
+    if (!info) {
+      this.closed = true
+      return
+    }
+
     this.clientId = info.name;
     this.url = info.url;
 
@@ -214,6 +271,8 @@ export default class Tunnel extends EventEmitter {
     }
 
     await this.establish(info);
+
+    this.closed = false
   }
 
   async close() {

@@ -24,6 +24,7 @@ type CliOpts = {
   allowInvalidCert?: boolean
   open?: boolean
   printRequests?: boolean
+  secret?: string
 }
 
 let lock = false
@@ -36,7 +37,6 @@ const runClient = async (argv: CliOpts) => {
   }
 
   if (lock) return
-
   lock = true
 
   const tunnel = await localtunnel({
@@ -50,7 +50,8 @@ const runClient = async (argv: CliOpts) => {
     local_key: argv.localKey,
     local_ca: argv.localCa,
     allow_invalid_cert: argv.allowInvalidCert,
-  })
+    secret: argv.secret,
+  }, false)
   
   tunnel.on('error', async (err) => {
     logger.error(err.message)
@@ -60,34 +61,38 @@ const runClient = async (argv: CliOpts) => {
   });
   
   tunnel.once('close', async () => {
-    if (lock) return
+    if (lock && !tunnel.isClosed()) return
     logger.info(`Restarting tunnel`)
     await sleep(5000)
     await runClient(argv)
   })
 
-  logger.info(`your url is: ${tunnel.getURL()}`);
-  
-  /**
-     * `cachedUrl` is set when using a proxy server that support resource caching.
-     * This URL generally remains available after the tunnel itself has closed.
-     * @see https://github.com/localtunnel/localtunnel/pull/319#discussion_r319846289
-     */
-  if (tunnel.getCachedURL()) {
-    logger.info(`your cachedUrl is: ${tunnel.getCachedURL()}`);
-  }
-  
-  if (argv.open) {
-    openurl.open(tunnel.getURL());
-  }
-  
   if (argv.printRequests) {
     tunnel.on('request', info => {
       logger.log(new Date().toString(), info.method, info.path);
     });
   }
 
+  // starts now
+  await tunnel.open()
   lock = false
+
+  if (!tunnel.isClosed()) {
+    logger.info(`your url is: ${tunnel.getURL()}`);
+    /**
+     * `cachedUrl` is set when using a proxy server that support resource caching.
+     * This URL generally remains available after the tunnel itself has closed.
+     * @see https://github.com/localtunnel/localtunnel/pull/319#discussion_r319846289
+     */
+    if (tunnel.getCachedURL()) {
+      logger.info(`your cachedUrl is: ${tunnel.getCachedURL()}`);
+    }
+  
+    if (argv.open) {
+      openurl.open(tunnel.getURL());
+    }
+  }
+
 }
 
 const main = async () => {
@@ -117,15 +122,18 @@ const main = async () => {
 
     .option('--local-host, -l <string>', 'Tunnel traffic to this host instead of localhost')
     .option('--local-hostname <string>', 'Rewrites the HTTP Host header going to the local server')
+
     .option('--local-https', 'Tunnel traffic to a local HTTPS server')
     .option('--local-key <path>', 'Path to certificate key file for local HTTPS server')
     .option('--local-cert <path>', 'Path to certificate PEM file for local HTTPS server')
     .option('--local-ca <path>', 'Path to certificate authority file for self-signed certificates')
-    
     .option('--allow-invalid-cert', 'Disable certificate checks for your local HTTPS server (ignore cert/key/ca options)')
-    
+
+    .option('--secret <string>', 'Shared secret to enable JWT communication with the server')
+
     .option('--open, -o', 'Opens the tunnel URL in your browser')
     .option('--print-requests', 'Print basic request info')
+
     .action(runClient)
 
   program.parse();

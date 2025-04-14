@@ -31,6 +31,7 @@
     "axios": "^1.8.4",
     "commander": "^13.1.0",
     "dotenv": "^16.5.0",
+    "jsonwebtoken": "^9.0.2",
     "openurl": "^1.1.1",
     "winston": "^3.17.0"
   },
@@ -39,6 +40,7 @@
     "@stylistic/eslint-plugin-ts": "^4.2.0",
     "@types/debug": "4.1.12",
     "@types/expect": "1.20.4",
+    "@types/jsonwebtoken": "^9.0.9",
     "@types/koa": "2.15.0",
     "@types/koa-router": "7.4.8",
     "@types/mocha": "10.0.10",

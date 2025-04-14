@@ -1,9 +1,9 @@
 import Tunnel, { TunnelOptions } from './lib/Tunnel.js';
 
 
-const localtunnel = async (options: TunnelOptions) => {
+const localtunnel = async (options: TunnelOptions, open = true) => {
   const client = new Tunnel(options);
-  await client.open()
+  if (open) await client.open()
   return client
 };
 
