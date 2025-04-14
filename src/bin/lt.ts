@@ -4,10 +4,10 @@ import 'dotenv/config';
 
 import { InvalidArgumentError, Option, program } from 'commander';
 import openurl from 'openurl';
-import pkg from '../package.json' with { type: "json" };
-import { newLogger } from '../src/lib/logger.js';
-import { sleep } from '../src/lib/utils.js';
-import localtunnel from '../src/localtunnel.js';
+import pkg from '../../package.json' with { type: "json" };
+import { newLogger } from '../lib/logger.js';
+import { sleep } from '../lib/utils.js';
+import localtunnel from '../localtunnel.js';
 
 const logger = newLogger('lt')
 
@@ -129,7 +129,7 @@ const main = async () => {
     .option('--local-ca <path>', 'Path to certificate authority file for self-signed certificates')
     .option('--allow-invalid-cert', 'Disable certificate checks for your local HTTPS server (ignore cert/key/ca options)')
 
-    .option('--secret <string>', 'Shared secret to enable JWT communication with the server')
+    .option('--secret <string>', 'Shared secret to enable JWT protected communication with the server')
 
     .option('--open, -o', 'Opens the tunnel URL in your browser')
     .option('--print-requests', 'Print basic request info')
