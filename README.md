@@ -26,6 +26,13 @@ npx localtunnel <args>
 npm install -g localtunnel
 ```
 
+### Home brew
+
+```bash
+brew install lt
+```
+
+
 ### As a dependency in your project
 
 ```
