@@ -142,7 +142,7 @@ export default class Tunnel extends EventEmitter {
     // no subdomain at first, maybe use requested domain
     const assignedDomain = opts.subdomain;
     // where to quest
-    const uri = baseUri + (assignedDomain || '?new');
+    const uri = baseUri + (assignedDomain || '') + '?new';
 
     const waitFor = 1000
     const maxRetries = 10
