@@ -142,7 +142,7 @@ export default class Tunnel extends EventEmitter {
     // no subdomain at first, maybe use requested domain
     const assignedDomain = opts.subdomain;
     // where to quest
-    const uri = baseUri + (assignedDomain || '') + '?new';
+    const uri = baseUri + (assignedDomain || '?new');
 
     const waitFor = 1000
     const maxRetries = 10
@@ -187,7 +187,7 @@ export default class Tunnel extends EventEmitter {
         }
 
         const waitTime = waitFor * (retries * 1.5)
-        this.logger.debug(`tunnel server ${uri} offline: ${err.message}, retry in ${Math.floor(waitTime/1000)}sec (${retries}/${maxRetries})`);
+        this.logger.debug(`tunnel server error: ${err.response?.data?.message || err.message}, retry in ${Math.floor(waitTime/1000)}sec (${retries}/${maxRetries})`);
         await sleep(waitTime)
       }
     }
